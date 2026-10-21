@@ -19,7 +19,14 @@ Open het lokale adres dat Streamlit toont, doorgaans http://localhost:8501. Acti
 
 Met een lege of ontbrekende `MISTRAL_API_KEY` werkt de volledige demo zonder netwerk of API-kosten. De sidebar kan mock-modus ook forceren wanneer een key aanwezig is. De output komt dan expliciet uit vaste fixtures, niet uit een LLM.
 
-Voor echte verwerking: vul `MISTRAL_API_KEY` in `.env` in. `MISTRAL_MODEL` is instelbaar (standaard `mistral-small-latest`). Herstart de app na configuratiewijzigingen. De vier dummy-mails worden bij API-gebruik naar Mistral gestuurd. Een API-fout wordt getoond; de app schakelt dan niet ongemerkt over naar mock-output. Mistral-toegang en modelbeschikbaarheid hangen af van je account.
+Voor echte verwerking:
+
+1. Vul zelf je key in het verborgen veld **Mistral API-key** in de sidebar in. Deze invoer blijft in de sessie en wordt niet naar een bestand of het audit-log geschreven. Je hoeft de key niet in de chat te delen. Als alternatief kun je lokaal `MISTRAL_API_KEY` in `.env` instellen en de app herstarten. Lees of deel dit bestand niet via de chat.
+2. Laat **Mock-modus forceren** uit. De sidebar toont **MISTRAL · gereed voor aanvraag** zodra een key beschikbaar is; dit is nog geen verificatie van de key.
+3. Controleer **Mistral-model** (standaard `mistral-small-latest`), selecteer een mail en klik **Verwerk met AI-agent**. Alleen de geselecteerde dummy-mail wordt naar Mistral gestuurd; dit kan API-kosten veroorzaken.
+4. Controleer het gegenereerde dossier en keur het goed zoals in mock-modus.
+
+Het invoerveld krijgt voorrang op `.env`. Wis de invoer om terug te vallen op `.env`; forceer mock-modus voor een demo zonder API-aanroep. `MISTRAL_MODEL` in `.env` bepaalt de standaardmodelnaam. Bij ongeldige keys, ontbrekende toegang, limieten, time-outs en ongeldige output verschijnt een Nederlandse foutmelding zonder ruwe API-response. Er is geen stille terugval naar mock-output. Mistral-toegang en modelbeschikbaarheid hangen af van je account.
 
 De integratie gebruikt `mistralai` v2, `client.chat.parse` en Pydantic structured output, volgens de [officiële Mistral-documentatie](https://docs.mistral.ai/studio/conversations/structured-output/custom).
 

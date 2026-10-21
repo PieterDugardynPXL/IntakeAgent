@@ -1,4 +1,6 @@
 import json
+import os
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -6,9 +8,16 @@ import streamlit as st
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from agent import configured_mode, process_email
+from agent import AgentError, configured_mode, process_email
 from audit import append_event, field_diff
-from models import CaseIntake, Rechtsdomein, Urgentie
+from models import CaseIntake, Rechtsdomein, RelevanteDatum, Urgentie
+
+
+def has_suspicious_january_first(relevante_datums: list[RelevanteDatum]) -> bool:
+    # 1 januari kan echt zijn: alleen attenderen, nooit afwijzen of aanpassen.
+    return any(re.fullmatch(r'[0-9]{4}-01-01', item.datum) is not None
+               for item in relevante_datums)
+
 
 ROOT = Path(__file__).parent
 load_dotenv(ROOT / '.env')
@@ -27,9 +36,15 @@ st.info('Sollicitatiedemo met fictieve gegevens. De advocaat beoordeelt feiten, 
 mails = json.loads((ROOT / 'data' / 'mails.json').read_text(encoding='utf-8'))
 with st.sidebar:
     st.header('Demo-instellingen')
+    api_key = st.text_input('Mistral API-key', type='password', key='mistral_api_key',
+                            help='Alleen voor deze sessie. Leeg laten gebruikt MISTRAL_API_KEY uit .env, indien ingesteld.')
+    st.caption('Je kunt de key hier zelf invoeren of lokaal in .env instellen. De ingevoerde key wordt niet naar het audit-log of een bestand geschreven.')
+    model = st.text_input('Mistral-model', value=os.getenv('MISTRAL_MODEL', 'mistral-small-latest'))
     force_mock = st.toggle('Mock-modus forceren', value=False)
-    mode = configured_mode(force_mock)
-    st.success('MOCK · geen API-aanroep' if mode == 'mock' else 'MISTRAL · API actief')
+    mode = configured_mode(force_mock, api_key)
+    st.success('MOCK · geen API-aanroep' if mode == 'mock' else 'MISTRAL · gereed voor aanvraag')
+    if mode == 'mistral':
+        st.caption('Bij verwerken wordt alleen de gekozen klantmail naar Mistral gestuurd. De aanvraag kan API-kosten veroorzaken.')
     st.caption('Zonder API-key schakelt de demo automatisch naar vaste voorbeeldoutput.')
     st.divider()
     st.write('**Werkwijze**')
@@ -57,12 +72,14 @@ with right:
                     steps.append((title, detail))
                     st.markdown(f'**{title}**')
                     st.text(detail)
-                ai, used_mode = process_email(mail, force_mock, report)
+                ai, used_mode = process_email(mail, force_mock, report, api_key=api_key, model=model)
                 run_id = str(uuid4())
                 append_event(run_id, mail, used_mode, ai)
                 st.session_state.run = dict(id=run_id, case_id=mail['id'], ai=ai,
                                             mode=used_mode, steps=steps, approved=None)
                 status.update(label='Conceptdossier klaar voor menselijke review', state='complete')
+        except AgentError as exc:
+            st.error(str(exc))
         except Exception:
             # Toon geen ruwe API-fout met mogelijk gevoelige requestgegevens.
             st.error('Verwerking of opslag mislukt. Controleer API-key, model, netwerk en schrijfrechten. Kies eventueel mock-modus en probeer opnieuw.')
@@ -89,6 +106,9 @@ with right:
                 values = {}
                 for field, label in [('kernfeiten','Kernfeiten'), ('betrokken_partijen','Betrokken partijen')]:
                     values[field] = st.text_area(label, '\n'.join(getattr(ai, field)), height=130)
+                if has_suspicious_january_first(ai.relevante_datums):
+                    st.info('Controleer deze datum: staat de volledige datum letterlijk in de mail? '
+                            'Een jaartal uit de mail mag niet als volledige datum worden opgevoerd.')
                 dates = st.data_editor([d.model_dump() for d in ai.relevante_datums], num_rows='dynamic',
                                        column_order=['datum','type','toelichting'],
                                        column_config={k: st.column_config.TextColumn(k.capitalize(), required=True) for k in ['datum','type','toelichting']},

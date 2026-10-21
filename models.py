@@ -23,7 +23,11 @@ class DossierModel(BaseModel):
 
 
 class RelevanteDatum(DossierModel):
-    datum: str = Field(min_length=1, description='ISO-datum indien bekend; anders onbekend')
+    datum: str = Field(min_length=1, description=(
+        'Volledige ISO-datum (YYYY-MM-DD) alleen als dag, maand en jaar letterlijk '
+        'in de mail staan; anders enkel het vermelde jaartal (YYYY) of onbekend. '
+        'Verzin geen ontbrekende datumdelen; vermeld ontbrekende precisie in de toelichting.'
+    ))
     type: str = Field(min_length=1)
     toelichting: str
 

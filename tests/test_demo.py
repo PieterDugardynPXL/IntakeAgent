@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,11 +9,37 @@ from unittest.mock import patch
 from agent import process_email
 from audit import append_event, field_diff
 from models import CaseIntake
+from mock_agent import mock_intake
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class DemoTests(unittest.TestCase):
+    def test_case_accepts_year_without_invented_precision(self):
+        data = mock_intake('FAM-001').model_dump()
+        data['relevante_datums'] = [{'datum': '2014', 'type': 'huwelijksjaar',
+                                    'toelichting': 'Exacte datum onbekend.'}]
+        case = CaseIntake.model_validate(data)
+        self.assertEqual(case.relevante_datums[0].datum, '2014')
+
+    def test_mock_dates_keep_source_precision(self):
+        months = ('januari februari maart april mei juni juli augustus september '
+                  'oktober november december').split()
+        pattern = r'\b([0-9]{1,2}) (' + '|'.join(months) + r') ([0-9]{4})\b'
+        mails = json.loads((ROOT / 'data/mails.json').read_text(encoding='utf-8'))
+        for mail in mails:
+            source = mail['tekst'].lower()
+            full_dates = {f'{year}-{months.index(month) + 1:02d}-{int(day):02d}'
+                          for day, month, year in re.findall(pattern, source)}
+            full_dates.update(re.findall(r'\b[0-9]{4}-[0-9]{2}-[0-9]{2}\b', source))
+            for item in mock_intake(mail['id']).relevante_datums:
+                with self.subTest(case=mail['id'], datum=item.datum):
+                    if re.fullmatch(r'[0-9]{4}', item.datum):
+                        self.assertRegex(source, rf'\b{item.datum}\b')
+                        self.assertIn('onbekend', item.toelichting.lower())
+                    elif item.datum != 'onbekend':
+                        self.assertIn(item.datum, full_dates)
+
     def test_all_mails_without_api_key(self):
         mails = json.loads((ROOT / 'data/mails.json').read_text(encoding='utf-8'))
         self.assertEqual(len(mails), 4)
